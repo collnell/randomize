@@ -331,16 +331,11 @@ str(ci95.dd)
 colnames(ci95.dd)
 
 #add direct defense w/95ci also
-dd.95ci<-lrr.95ci%>%left_join(ci95.dd%>%dplyr::select(species,dd.lb =`2.5 %`, dd.ub=`97.5 %`), by='species')%>%
-  mutate(species = ifelse(species == '(Intercept)', 'ARCA', species))%>%
-  mutate(dd.ci.ub =ifelse(species != 'ARCA',dd.ub+0.020831628, 0.020831628),
-         dd.ci.lb=ifelse(species != 'ARCA', dd.lb+0.0171131696,0.0171131696))
-
 dd.cis<-ci95.dd%>%dplyr::select(species,dd.lb =`2.5 %`, dd.ub=`97.5 %`)%>%
   mutate(species = ifelse(species == '(Intercept)', 'ARCA', species))%>%
   mutate(dd.ci.ub =ifelse(species != 'ARCA',dd.ub+0.020831628, 0.020831628),
          dd.ci.lb=ifelse(species != 'ARCA', dd.lb+0.0171131696,0.0171131696))
-dd.95ci<-lrr.95ci%>%left_join(dd.cis,by='species'
+dd.95ci<-lrr.95ci%>%left_join(dd.cis,by='species')
 
 ##mean and 95ci predicted from model
 ggplot(lrr.95ci, aes(reorder(species, yi_mean), yi_mean))+
@@ -350,12 +345,16 @@ ggplot(lrr.95ci, aes(reorder(species, yi_mean), yi_mean))+
   labs(x='Species', y='Bird effect - ln(birds/no birds)')
 
 ##LRR and DD
+str(dd.95ci)
 ggplot(dd.95ci, aes(DD_mean_mean, yi_mean))+
-  geom_errorbar(aes(ymin=ci.ub, ymax=ci.ub), color='grey')+
   geom_errorbarh(aes(xmin=dd.ci.lb, xmax=dd.ci.ub), color='grey')+
+  geom_errorbar(aes(ymin=ci.ub, ymax=ci.ub), size-4,color='black')+
   geom_point(aes(color=species))+
   geom_hline(yintercept=0, lty='dashed')+
-  labs(x='Herbivore density in bird exclusion', y='Bird effect - ln(birds/no birds)')
+  labs(x='Herbivore density in bird exclusion', y='Bird effect - ln(birds/no birds)')+
+  geom_smooth(method='lm',se=FALSE, lty='dashed',color='grey')
 
-summary(lm(yi_mean~log(1+DD_mean_mean), data=dd.95ci))
+summary(lm(yi_mean~log(1/DD_mean_mean), data=dd.95ci))
 ##p=0.23
+
+write.csv(dd.95ci, '/Users/colleennell/Dropbox/Projects/CSS exclusion/data/2018/CSS_lrr_modci.csv', row.names=FALSE)
