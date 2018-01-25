@@ -22,10 +22,18 @@ c.plant<-all.plant%>%filter(treat=='C')%>%mutate(calc = 'ID_C')
 ggplot(all.plant, aes(sample, herb_mg_dens))+geom_text(aes(label=sample, color=treat))+facet_wrap(~species)
 #lengths by order - sizes<-read.csv('data/2018/CSS_arth_size.csv')
 # plant g - methods<-read.csv('data/2017/CSS18_plants.csv')
+methods<-read.csv('data/2017/CSS18_plants.csv')
+str(methods)
+View(methods)
 
 ##############################
-#find all combinations can be made by splitting 'T' samples into 2 groups - ID_T (n=5), DD (n=3)
-find_combos<-function(sps, df, n_dd=3){
+## find_combos 
+# for a plant species (sps, 4-letter code) found in df$species
+# find all combinations that samples in treat 'T' can be split into 2 groups, 'DD', and 'ID_T'
+# with n_dd samples assigned to the 'DD' group
+# Value - a list of dataframes - subset of species' data, all possible combos, combos in melted format, combos with all data
+
+find_combos<-function(sps, df=t.plant, n_dd=3){
   sp.df<-df%>%filter(species == sps)
   #find al possibl combinations without replacemnt
   comb<-t(combn(as.character(sp.df$sample), n_dd, simplify=TRUE))
@@ -34,13 +42,29 @@ find_combos<-function(sps, df, n_dd=3){
   sp.melt<-sp.comb%>%melt(id.vars=c('species','Var1','calc'))
   sp.cast<-sp.melt%>%dcast(species+value~Var1, value.var='calc', fill = 'ID_T')
   full.df<-sp.df%>%left_join(sp.cast, by=c('species','sample'='value'))
-  return(list(t.data=sp.df, combos=sp.comb, combo_melt = sp.melt, combo_cast = sp.cast, combo_all = full.df))
+  out=list(t.data=sp.df, combos=sp.comb, combo_melt = sp.melt, combo_cast = sp.cast, combo_all = full.df)
+  return(out)
 }
+
+# for a single species:
 ARCA<-find_combos('ARCA',t.plant)
-str(ARCA) # returns list with 2 df - the raw t.data, possible combos, melted combos, and cast cmbos (col each combo)
+str(ARCA) 
 View(ARCA$combo_cast)
 View(ARCA$t.data)
 View(ARCA$combo_all)
+
+# apply to all species
+sps.list<-as.character(unique(all.plant$species))
+str(sps.list)
+all.combos<-sapply(sps.list, find_combos, USE.NAMES=TRUE, simplify=FALSE) # lapply but retains names from input into list hierarchy
+str(all.combos, max.level=2)
+## a function that for a given response variable
+#calculate LRR
+#makes figures - all possible DD/ID combos, 
+#with test significance indicated on the fig
+#posthoc contrasts sp*treat - which species differed between treatments?
+
+
 
 ##############################
 #is the difference between the two group means more than expected by random?
