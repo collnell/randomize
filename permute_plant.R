@@ -136,7 +136,9 @@ ggplot(lrr.summary, aes(DD_mean_mean, lrr_mean))+
   geom_errorbar(aes(ymin=lrr.lb, ymax=lrr.ub),color='grey')+
   geom_errorbarh(aes(xmin=dd.lb, xmax=dd.ub), color='grey', height=0)+
   geom_point(aes(color=species))+
-  geom_hline(yintercept=0, lty='dashed')
+  geom_smooth(method='lm', se=F, lty='dashed', color='grey')+
+  geom_hline(yintercept=0, lty='dotted')+
+  labs(x='Herbivore density in exclusion',y='LRR Bird effect')
 
 summary(lm(lrr_mean~log(1+DD_mean_mean), data=lrr.summary))
 
