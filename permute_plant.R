@@ -11,21 +11,11 @@ library(mosaic)
 
 #1. use randomization test to see whether group means differ than null hypothesis (random)
 #2. for all permutations or treatment assignments that do not differ from null, calculate LRR and DD - obtain distribution of these values
-#3. for each iteratio of LRR and DD, run regression and recrod P, R2, sign
+#3. for each iteratio of LRR and DD
 
 ## run same procedure for all species - write as function of species
 ## apply across list of dataframes for each species
 setwd('/Users/colleennell/Dropbox/Projects/CSS exclusion/')
-all.plant<-read.csv('data/2018/CSS_plant_data.csv')
-#t.plant<-all.plant%>%filter(treat=='T')
-#c.plant<-all.plant%>%filter(treat=='C')%>%mutate(calc = 'ID_C')
-
-ggplot(all.plant, aes(sample, herb_mg_dens))+geom_text(aes(label=sample, color=treat))+facet_wrap(~species)
-#lengths by order - sizes<-read.csv('data/2018/CSS_arth_size.csv')
-# plant g - methods<-read.csv('data/2017/CSS18_plants.csv')
-#methods<-read.csv('data/2017/CSS18_plants.csv')
-#str(methods)
-#View(methods)
 
 ##############################
 ## find_combos 
@@ -47,14 +37,6 @@ find_combos<-function(sps, df=all.plant, n_dd=3){
   out=list(t.data=t.plant, c.data=c.plant, combos=sp.comb, combo_melt = sp.melt, combo_cast = sp.cast, combo_all = full.df)
   return(out)
 }
-
-# for a single species:
-#ARCA<-find_combos('ARCA',all.plant)
-
-# apply to all species
-sps.list<-as.character(unique(all.plant$species))
-all.combos<-sapply(sps.list, find_combos, USE.NAMES=TRUE, simplify=FALSE) # lapply but retains names from input into list hierarchy
-#str(all.combos, max.level=2)
 
 ##############################
 ## combo_vars
@@ -86,26 +68,8 @@ combo_vars<-function(sps, master=all.combos){
 }  
 #ARCA.lrr<-combo_vars(sps='ARCA')
 #View(ARCA.lrr$lrr.df)
-
-##all possible lrr & DD for all species
-all.lrr<-sapply(sps.list, combo_vars, USE.NAMES=TRUE, simplify=FALSE)
-#str(all.lrr, max.level=2)
-
-# combine all lrr.df into single df
-lrr.df<-bind_rows(all.lrr)
-View(lrr.df)
-
-write.csv(lrr.df, 'data/2018/CSS_all_lrrs.csv', row.names=FALSE)
 ##############################
 ## get mean and 95% CI for each species 
-
-ggplot(lrr.df, aes(DD_mean, lrr))+
-  geom_errorbar(data=lrr.df, aes(ymin=lrr-sei, ymax=lrr+sei),color='grey')+
-  geom_errorbarh(aes(xmin=DD_mean-DD_se, xmax=DD_mean+DD_se), color='grey')+
-  geom_point(aes(color=species))
-
-##find mean and 95ci based on distribution of possible values
-##95%CI
 lrr_mean<-function(lrr.df){
   ##find mean and 95ci based on distribution of possible values
   lrr.avg<-lrr.df%>%group_by(species)%>%
@@ -128,9 +92,40 @@ lrr_mean<-function(lrr.df){
            dd.ub=ifelse(species == 'ARCA',`97.5 %`, `97.5 %`+dd.fit$coefficients[1]))
   return(ci95)
 }
+# for a single species:
+#ARCA<-find_combos('ARCA',all.plant)
+
+##############################
+all.plant<-read.csv('data/2018/CSS_plant_data.csv')
+str(all.plant)
+# do same for predators
+#all.plant$herb_mg_dens<-all.plant$pred_mg_dens
+ggplot(all.plant, aes(sample, herb_mg_dens))+geom_text(aes(label=sample, color=treat))+facet_wrap(~species)
+
+# apply to all species
+sps.list<-as.character(unique(all.plant$species))
+all.combos<-sapply(sps.list, find_combos, USE.NAMES=TRUE, simplify=FALSE) # lapply but retains names from input into list hierarchy
+#str(all.combos, max.level=2)
+
+##all possible lrr & DD for all species
+all.lrr<-sapply(sps.list, combo_vars, USE.NAMES=TRUE, simplify=FALSE)
+#str(all.lrr, max.level=2)
+
+# combine all lrr.df into single df
+lrr.df<-bind_rows(all.lrr)
+#View(lrr.df)
 
 lrr.summary<-lrr_mean(lrr.df)
 #View(lrr.summary)
+
+ggplot(lrr.df, aes(DD_mean, lrr))+
+  geom_errorbar(data=lrr.df, aes(ymin=lrr-sei, ymax=lrr+sei),color='grey')+
+  geom_errorbarh(aes(xmin=DD_mean-DD_se, xmax=DD_mean+DD_se), color='grey')+
+  geom_point(aes(color=species))+
+  geom_hline(yintercept=0, lty='dotted')+
+  labs(x='Herbivore density in exclusion',y='LRR Bird effect')
+
+#write.csv(lrr.df, 'data/2018/CSS_all_lrrs.csv', row.names=FALSE)
 
 ggplot(lrr.summary, aes(DD_mean_mean, lrr_mean))+
   geom_errorbar(aes(ymin=lrr.lb, ymax=lrr.ub),color='grey')+
@@ -140,7 +135,44 @@ ggplot(lrr.summary, aes(DD_mean_mean, lrr_mean))+
   geom_hline(yintercept=0, lty='dotted')+
   labs(x='Herbivore density in exclusion',y='LRR Bird effect')
 
-summary(lm(lrr_mean~log(1+DD_mean_mean), data=lrr.summary))
+summary(lm(lrr_mean~DD_mean_mean, data=lrr.summary))
+# P = 0.1127
+##############################
+# test for proportionality
+log.x<-lrr.summary$lrr_mean
+log.y<-log(lrr.summary$DD_mean_mean)
+log.xy<-log.x+log.y
+log.x.on.y<-log.x-log.y
+tstat<-cor(log.xy, log.x.on.y)^2
+permutations=10000
+p.value<-sum(replicate(permutations, cor(log.xy, sample(log.x.on.y))^2>tstat))/permutations
+p.value ##0.4345
+#do not reject the null hypothesis that the slope is 1 - DD and LRR are proportiona;
+
+install.packages('propr')
+library(propr)
+
+# phi and rho
+# phit, perb, phis
+?perb
+perb(lrr.df, ivar=0)
+
+##############################
+## is this different than just the raw means without groups?
+raw.mean<-all.plant%>%
+  group_by(species, treat)%>%
+  summarize_at(vars(herb_mg_dens), funs(mean(., na.rm=TRUE), sd(., na.rm=TRUE), se, length))%>%
+  melt(id.vars=c('species','treat'))%>%
+  dcast(species~treat+variable)
+
+raw.lrr<-summary(escalc('ROM', m1i=C_mean, m2i=T_mean, sd1i=C_sd, sd2i=T_sd, n1i=C_length, n2i=T_length, data=raw.mean))
+
+ggplot(raw.lrr, aes(T_mean, yi))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  geom_hline(yintercept=0, lty='dotted')
+
+summary(lm(yi~log(1+T_mean), data=raw.lrr))
 
 ##############################
 ## plot_lrr
@@ -148,6 +180,10 @@ summary(lm(lrr_mean~log(1+DD_mean_mean), data=lrr.summary))
 #makes figures - all possible DD/ID combos, mean+sd, se, n
 #with test significance indicated on the fig
 #posthoc contrasts sp*treat - which species differed between treatments?
+
+
+##############################
+## account for phylogenetic relatedness (phylogenetic non-independence) in trait-trait or trait-habitat correlations
 
 
 lrr.hpq<-lrr.df%>%left_join()
@@ -165,6 +201,23 @@ plot_lrr<-function(lrr.df){
 
 ##bind all lrr.df together
 View(all.lrr$ARCA$lrr.df)
+##############################
+## dealing with spurrious correlation
+library(propr)#https://github.com/tpq/propr/blob/master/vignettes/a_introduction.Rmd
+# phi
+# rho
+#phi_s
+
+
+
+
+
+
+
+
+
+
+
 
 
 ##############################
