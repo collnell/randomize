@@ -107,6 +107,32 @@ sps.list<-as.character(unique(all.plant$species))
 all.combos<-sapply(sps.list, find_combos, USE.NAMES=TRUE, simplify=FALSE) # lapply but retains names from input into list hierarchy
 #str(all.combos, max.level=2)
 
+##############################
+#is the difference between the two group means more than expected by random?
+ARCA['combo_cast']
+13:length(colnames(ARCA$combo_all))
+colnames(ARCA$combo_all)[13:length(colnames(ARCA$combo_all))]
+
+#function that tests null for all combo cols
+combo_legit<-function(combo_all, var=herb_mg_dens,combos =13:length(colnames(combo_all)), permutations = 1000){
+  pval.df<-NULL
+  combo_cols<-colnames(combo_all)[13:length(colnames(combo_all))]
+  
+  for(i in combo_cols){
+    obs <- diff(mean(var~i, data=combo_all))
+    h0<-do(permutations)*diff(mean(var~shuffle(calc), data=combo_all)) 
+    res.df<-data.frame(species = paste(unique(combo_all$species)),
+                       iter = paste(i),
+                       sum = sum(h0$ID_T>=obs),
+                       n = length(h0$ID_T),
+                       p = sum/length,
+                       observed = obs)
+    pval.df<-rbind(pval.df, res.df)
+  }
+  return(pval.df)
+}
+
+
 ##all possible lrr & DD for all species
 all.lrr<-sapply(sps.list, combo_vars, USE.NAMES=TRUE, simplify=FALSE)
 #str(all.lrr, max.level=2)
@@ -149,7 +175,6 @@ p.value<-sum(replicate(permutations, cor(log.xy, sample(log.x.on.y))^2>tstat))/p
 p.value ##0.4345
 #do not reject the null hypothesis that the slope is 1 - DD and LRR are proportiona;
 
-install.packages('propr')
 library(propr)
 
 # phi and rho
@@ -175,11 +200,73 @@ ggplot(raw.lrr, aes(T_mean, yi))+
 summary(lm(yi~log(1+T_mean), data=raw.lrr))
 
 ##############################
-## plot_lrr
-## a function that for a given response variable
-#makes figures - all possible DD/ID combos, mean+sd, se, n
-#with test significance indicated on the fig
-#posthoc contrasts sp*treat - which species differed between treatments?
+# select 1 combo from each species
+# test species' correlations
+samp_res<-function(df){
+  # select 1 combo from each species
+  samp_combo<-df%>%group_by(species)%>%sample_n(size=1)
+  # test correlation
+  samp.lm<-lm(samp_combo$lrr~log(1+samp_combo$DD_mean))
+  # p, r2, est, tval - make a df with results
+  samp.df<-data.frame(rsq = summary(samp.lm)$r.squared, pval = summary(samp.lm)$coefficients[2,4], 
+                      tval = summary(samp.lm)$coefficients[2,3],est = summary(samp.lm)$coefficients[2,1])
+}
+
+##takes a while..s
+samp_reps<-do(10000)*samp_res(lrr.df)
+#n/total = p prop
+samp_reps$sig<-ifelse(samp_reps$pval<=0.05, 1, 0)
+sum(samp_reps$sig)/length(samp_reps$sig)
+## p =0.1189 
+mean(samp_reps$rsq) ##0.2189
+
+histogram(samp_reps$rsq)
+mean(samp_reps$rsq)
+sum(samp_reps$sig) #over 20% of them are significant
+histogram(samp_reps$est)
+# if the correlation is significant less than 5% of the time...
+
+##OR - get null distribution of correlation when species is random - shuffle 
+###########################
+## hpq
+ggplot(raw.lrr, aes(C_mean, T_mean))+
+  geom_point()+
+  geom_smooth(method='lm', se=F)
+
+hpq<-read.csv('data/2017/CSS_means.csv')%>%dplyr::select(sp, comp, comp_se, hpq, hpq_se)
+
+hpt<-raw.lrr%>%
+  left_join(hpq, by=c('species'='sp'))
+
+summary(aov(lm(yi~log(1+hpq), data=hpt)))
+summary(aov(lm(T_mean~log(1+hpq), data=hpt)))
+## hpq and herb dens in exclusion is correlated
+
+ggplot(hpt, aes(T_mean, hpq))+
+  geom_point()+
+  geom_smooth(method='lm', se=F)+
+  labs(x='Host plant quality', y='Herbivore density in exclusion')
+
+
+rlong<-raw.lrr%>%dplyr::select(species, C_mean, T_mean)%>%
+  melt(id.vars=c('species'))%>%
+  left_join(hpq, by=c('species'='sp'))
+
+#KM - usedlsmean for bird predation for each species controlling for density
+#LRR~species+density
+#density controls for association between density and bird predation as well as nonindependence
+Anova(lm(yi~T_mean*log(1+hpq), data=hpt), type='III')
+#only T_mean is sig
+
+levels(rlong$variable)<-c('birds','no birds')
+ggplot(rlong, aes(hpq, value))+geom_point(aes(color=variable))+
+  geom_smooth(method='lm', se=F, aes(color=variable))+
+  scale_x_log10()+
+  labs(x='Host plant quality\n(caterpillar weight gain)', y='Herbivore density')
+
+Anova(lm(value~log(1+hpq)*variable, data=rlong), type='III')
+
+## hpq correlated with herb dens
 
 
 ##############################
@@ -187,6 +274,7 @@ summary(lm(yi~log(1+T_mean), data=raw.lrr))
 
 
 lrr.hpq<-lrr.df%>%left_join()
+
 ggplot(lrr.df, aes(DD_mean, lrr))+
   geom_errorbar(data=lrr.df, aes(ymin=lrr-sei, ymax=lrr+sei),color='grey')+
   geom_errorbarh(aes(xmin=DD_mean-DD_se, xmax=DD_mean+DD_se), color='grey')+
@@ -208,15 +296,60 @@ library(propr)#https://github.com/tpq/propr/blob/master/vignettes/a_introduction
 # rho
 #phi_s
 
+# centered log-ratio
+
+# non-linear regression for ratio variables
 
 
 
+# test null hypthesis - https://www.nature.com/articles/srep23247
+# appropriate null
+# distribution of correlation coefficient between metrics
+# standard null - coefficient of correlation is 0 (rx,x-y) - erroneous (range would be between 1 and 01)
+# pearson correlation between change (x-y) and pretreatment value (x) 
+# if changes in variables are relateed to baseline values, consequential changes in variances of these vars
+# 1. determine range of the correlation coefficient between LRR and DD, conditional on the correlation between x any y
 
+# cor coef
+arca.lrr<-lrr.df%>%filter(species =='ARCA')
+cor(arca.lrr$DD_mean, arca.lrr$lrr) #.99
 
+# mean spurious coefficient of determination r2
+# sample correlation coefficient varies a lot depending on what data subset is used
+##############################
 
+##restricted permutation 
+# select 1 lrr/dd combo for each species, run correlation - 420 possible lrrs - ~40 in each species
+# repeat many times with resampling
+set.seed(33)
 
+# select 1 combo from each species
+# test species' correlations
+samp_res<-function(df){
+  # select 1 combo from each species
+  samp_combo<-df%>%group_by(species)%>%sample_n(size=1)
+  # test correlation
+  samp.lm<-lm(samp_combo$lrr~log(1+samp_combo$DD_mean))
+  # p, r2, est, tval - make a df with results
+  samp.df<-data.frame(rsq = summary(samp.lm)$r.squared, pval = summary(samp.lm)$coefficients[2,4], 
+                      tval = summary(samp.lm)$coefficients[2,3],est = summary(samp.lm)$coefficients[2,1])
+}
 
+##takes a while..start @ 11:33
+samp_reps<-do(10000)*samp_res(lrr.df)
+#n/total = p prop
+samp_reps$sig<-ifelse(samp_reps$pval<=0.05, 1, 0)
+sum(samp_reps$sig)/length(samp_reps$sig)
+## p =0.1189 
+mean(samp_reps$rsq) ##0.2189
 
+#transform DD
+samp_reps_logdd<-do(10000)*samp_res(lrr.df)
+samp_reps_logdd$sig<-ifelse(samp_reps_logdd$pval<=0.05, 1, 0)
+sum(samp_reps_logdd$sig)/length(samp_reps_logdd$sig)
+## p =0.1162
+mean(samp_reps_logdd$rsq) ##0.2178
+##should use randomization test to eliminate combos that are statistically different in mean first
 
 
 
