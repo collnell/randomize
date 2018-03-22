@@ -281,14 +281,6 @@ ggplot(lrr.df, aes(DD_mean, lrr))+
   geom_point(aes(color=species))
 
 
-
-plot_lrr<-function(lrr.df){
-  dd_id<-ggplot(all.lrr)
-  
-}
-
-##bind all lrr.df together
-View(all.lrr$ARCA$lrr.df)
 ##############################
 ## dealing with spurrious correlation
 library(propr)#https://github.com/tpq/propr/blob/master/vignettes/a_introduction.Rmd
@@ -316,42 +308,6 @@ cor(arca.lrr$DD_mean, arca.lrr$lrr) #.99
 
 # mean spurious coefficient of determination r2
 # sample correlation coefficient varies a lot depending on what data subset is used
-##############################
-
-##restricted permutation 
-# select 1 lrr/dd combo for each species, run correlation - 420 possible lrrs - ~40 in each species
-# repeat many times with resampling
-set.seed(33)
-
-# select 1 combo from each species
-# test species' correlations
-samp_res<-function(df){
-  # select 1 combo from each species
-  samp_combo<-df%>%group_by(species)%>%sample_n(size=1)
-  # test correlation
-  samp.lm<-lm(samp_combo$lrr~log(1+samp_combo$DD_mean))
-  # p, r2, est, tval - make a df with results
-  samp.df<-data.frame(rsq = summary(samp.lm)$r.squared, pval = summary(samp.lm)$coefficients[2,4], 
-                      tval = summary(samp.lm)$coefficients[2,3],est = summary(samp.lm)$coefficients[2,1])
-}
-
-##takes a while..start @ 11:33
-samp_reps<-do(10000)*samp_res(lrr.df)
-#n/total = p prop
-samp_reps$sig<-ifelse(samp_reps$pval<=0.05, 1, 0)
-sum(samp_reps$sig)/length(samp_reps$sig)
-## p =0.1189 
-mean(samp_reps$rsq) ##0.2189
-
-#transform DD
-samp_reps_logdd<-do(10000)*samp_res(lrr.df)
-samp_reps_logdd$sig<-ifelse(samp_reps_logdd$pval<=0.05, 1, 0)
-sum(samp_reps_logdd$sig)/length(samp_reps_logdd$sig)
-## p =0.1162
-mean(samp_reps_logdd$rsq) ##0.2178
-##should use randomization test to eliminate combos that are statistically different in mean first
-
-
 
 ##############################
 #is the difference between the two group means more than expected by random?
